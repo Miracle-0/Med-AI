@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Upload, Button, message, Tag } from 'antd';
+import React, { useState, useEffect, useRef } from 'react';
+import { Upload, Button, message } from 'antd';
 import { UploadOutlined, DeleteOutlined, ReloadOutlined, PlayCircleOutlined, FileTextOutlined } from '@ant-design/icons';
 import { textbookAPI, graphAPI, ragAPI } from '../services/api';
 
@@ -9,6 +9,9 @@ const TextbookPanel = ({ onSelect, selected, refreshKey }) => {
   const [parsing, setParsing] = useState({});
   const [extracting, setExtracting] = useState({});
   const [progress, setProgress] = useState({});
+  const [uploading, setUploading] = useState(false);
+  // 跟踪自动流程中的教材 ID，避免重复触发
+  const autoPipelineRef = useRef(new Set());
 
   useEffect(() => { loadTextbooks(); }, [refreshKey]);
 
@@ -23,34 +26,53 @@ const TextbookPanel = ({ onSelect, selected, refreshKey }) => {
     setLoading(false);
   };
 
+  /** 上传 → 解析 → 提取图谱 → 构建 RAG 索引，全自动 */
   const handleUpload = async (file) => {
+    setUploading(true);
+    let textbookId = null;
+
     try {
-      await textbookAPI.upload(file);
-      message.success('上传成功');
-      loadTextbooks();
+      // 1. 上传
+      const uploadRes = await textbookAPI.upload(file);
+      textbookId = uploadRes.data.textbook_id;
+      message.success('上传成功，开始解析...');
+      await loadTextbooks();
+
+      // 2. 解析
+      setParsing(p => ({ ...p, [textbookId]: true }));
+      const parseRes = await textbookAPI.parse(textbookId);
+      message.success(`解析完成（${parseRes.data.chapters_count} 章节），开始提取知识图谱...`);
+      setParsing(p => ({ ...p, [textbookId]: false }));
+      await loadTextbooks();
+
+      // 3. 提取图谱（带进度）
+      await doExtract(textbookId);
+
+      // 4. 构建 RAG 索引
+      await ragAPI.buildIndex(textbookId);
+      message.success('全流程完成！RAG 索引已构建');
+      await loadTextbooks();
+
+      // 自动选中
+      onSelect(textbookId);
     } catch (e) {
-      message.error(`上传失败: ${e.response?.data?.detail || e.message}`);
+      const detail = e.response?.data?.detail || e.message;
+      message.error(`处理失败: ${detail}`);
+      setParsing(p => ({ ...p, [textbookId]: false }));
+      setExtracting(p => ({ ...p, [textbookId]: false }));
     }
+
+    setUploading(false);
     return false;
   };
 
-  const handleParse = async (id) => {
-    setParsing(p => ({ ...p, [id]: true }));
-    try {
-      const res = await textbookAPI.parse(id);
-      message.success(`解析完成，共 ${res.data.chapters_count} 个章节`);
-      loadTextbooks();
-    } catch (e) {
-      message.error(`解析失败: ${e.response?.data?.detail || e.message}`);
-    }
-    setParsing(p => ({ ...p, [id]: false }));
-  };
-
-  const handleExtract = async (id) => {
+  /** 提取图谱（可复用） */
+  const doExtract = async (id) => {
+    autoPipelineRef.current.add(id);
     setExtracting(p => ({ ...p, [id]: true }));
     setProgress(p => ({ ...p, [id]: { current: 0, total: 0, phase: 'starting' } }));
 
-    // Start SSE progress listener
+    // SSE 进度监听
     const evtSource = new EventSource(graphAPI.extractProgress(id));
     evtSource.onmessage = (event) => {
       try {
@@ -66,16 +88,28 @@ const TextbookPanel = ({ onSelect, selected, refreshKey }) => {
     try {
       await graphAPI.extract(id);
       message.success('知识图谱提取完成');
+    } catch (e) {
+      // 504 超时时，后端可能仍在处理 — 检查是否实际已完成
+      if (e.code === 'ECONNABORTED' || e.response?.status === 504) {
+        message.warning('请求超时，后端仍在处理中，请稍后刷新查看结果');
+      } else {
+        throw e;
+      }
+    } finally {
+      setExtracting(p => ({ ...p, [id]: false }));
+      autoPipelineRef.current.delete(id);
+    }
+  };
 
-      // Auto-build RAG index
+  const handleExtract = async (id) => {
+    try {
+      await doExtract(id);
       await ragAPI.buildIndex(id);
-      message.success('RAG 索引构建完成');
-
+      message.success('RAG 索引已构建');
       loadTextbooks();
     } catch (e) {
       message.error(`提取失败: ${e.response?.data?.detail || e.message}`);
     }
-    setExtracting(p => ({ ...p, [id]: false }));
   };
 
   const handleDelete = async (id) => {
@@ -123,8 +157,12 @@ const TextbookPanel = ({ onSelect, selected, refreshKey }) => {
 
       {/* Upload & Refresh */}
       <Upload beforeUpload={handleUpload} showUploadList={false} style={{ width: '100%' }}>
-        <Button icon={<UploadOutlined />} block style={{ marginBottom: 8, height: 40 }}>
-          上传教材文件
+        <Button
+          icon={<UploadOutlined />} block
+          loading={uploading}
+          style={{ marginBottom: 8, height: 40 }}
+        >
+          {uploading ? '处理中...' : '上传教材（自动解析+提取）'}
         </Button>
       </Upload>
       <Button
@@ -158,6 +196,7 @@ const TextbookPanel = ({ onSelect, selected, refreshKey }) => {
           const st = statusConfig[item.parse_status] || statusConfig.uploaded;
           const prog = progress[item.textbook_id];
           const progPct = getProgressPercent(item.textbook_id);
+          const isAutoProcessing = autoPipelineRef.current.has(item.textbook_id);
 
           return (
             <div
@@ -208,7 +247,7 @@ const TextbookPanel = ({ onSelect, selected, refreshKey }) => {
               </div>
 
               {/* Extraction Progress Bar */}
-              {extracting[item.textbook_id] && prog && (
+              {(extracting[item.textbook_id] || isAutoProcessing) && prog && prog.status !== 'idle' && (
                 <div style={{ marginBottom: 8 }}>
                   <div style={{
                     display: 'flex', justifyContent: 'space-between', marginBottom: 4,
@@ -239,18 +278,18 @@ const TextbookPanel = ({ onSelect, selected, refreshKey }) => {
 
               {/* Action Buttons */}
               <div style={{ display: 'flex', gap: 6 }}>
-                {(item.parse_status === 'uploaded' || item.parse_status === 'failed') && (
+                {(item.parse_status === 'uploaded' || item.parse_status === 'failed') && !isAutoProcessing && (
                   <Button
                     type="text" size="small"
                     icon={<PlayCircleOutlined />}
                     loading={parsing[item.textbook_id]}
-                    onClick={(e) => { e.stopPropagation(); handleParse(item.textbook_id); }}
+                    onClick={(e) => { e.stopPropagation(); handleExtract(item.textbook_id); }}
                     style={{ fontSize: 12, color: 'var(--info)' }}
                   >
-                    解析
+                    解析并提取
                   </Button>
                 )}
-                {item.parse_status === 'completed' && (
+                {item.parse_status === 'completed' && !isAutoProcessing && (
                   <Button
                     type="text" size="small"
                     icon={<PlayCircleOutlined />}
