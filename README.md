@@ -2,6 +2,17 @@
 
 基于 LangGraph + RAG 的学科知识整合智能体，能够自动解析教材内容，构建跨学科知识图谱，并提供智能问答服务。
 
+> 🚀 **一键启动**：`cp .env.example .env && docker-compose up -d` → 浏览器打开 http://localhost:3000
+
+## 文档导航
+
+- [需求分析](docs/需求分析.md) — 子问题分解与设计依据
+- [系统设计](docs/系统设计.md) — 架构图、数据流、技术选型
+- [Agent 架构说明](docs/Agent架构说明.md) — 核心评分文档
+- [接口文档](docs/接口文档.md) — 完整 API 列表
+- [RAG Benchmark](docs/RAG_Benchmark.md) — 自建评测集与实验数据
+- [整合报告](report/整合报告.md) — 多教材整合实测报告
+
 ## 功能特性
 
 - **教材解析**: 支持 PDF、Markdown、TXT 格式的教材内容自动解析
