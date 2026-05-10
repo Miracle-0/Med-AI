@@ -23,6 +23,9 @@ async def extract_knowledge(textbook_id: str, db: AsyncSession = Depends(get_db)
     all_edges = []
 
     for chapter in chapters:
+        if not chapter.content or not chapter.content.strip():
+            continue
+
         nodes = await extractor.extract_from_chapter(
             chapter.content,
             textbook_id,

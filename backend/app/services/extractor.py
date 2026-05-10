@@ -39,11 +39,19 @@ class KnowledgeExtractor:
         nodes = []
         if "knowledge_points" in result:
             for kp in result["knowledge_points"]:
+                # 支持多种 JSON 格式
+                name = kp.get("name") or kp.get("topic") or kp.get("title") or ""
+                definition = kp.get("definition") or kp.get("content") or kp.get("description") or ""
+                category = kp.get("category") or kp.get("type") or "核心概念"
+
+                if not name:
+                    continue
+
                 node = KnowledgeNode(
                     node_id=f"{textbook_id}_node_{str(uuid.uuid4())[:8]}",
-                    name=kp.get("name", ""),
-                    definition=kp.get("definition", ""),
-                    category=kp.get("category", "核心概念"),
+                    name=name,
+                    definition=definition,
+                    category=category,
                     textbook_id=textbook_id,
                     chapter_id=chapter_id,
                     page=page
