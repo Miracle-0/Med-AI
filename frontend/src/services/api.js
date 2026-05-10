@@ -22,13 +22,13 @@ export const textbookAPI = {
 export const graphAPI = {
   extract: (textbookId) => api.post(`/graph/extract/${textbookId}`),
   getNodes: (textbookId) => api.get('/graph/nodes', { params: { textbook_id: textbookId } }),
-  getEdges: () => api.get('/graph/edges'),
+  getEdges: (textbookId) => api.get('/graph/edges', { params: { textbook_id: textbookId } }),
   merge: () => api.post('/graph/merge'),
   getDecisions: () => api.get('/graph/decisions'),
 };
 
 export const ragAPI = {
-  buildIndex: (textbookId) => api.post(`/rag/index?textbook_id=${textbookId}`),
+  buildIndex: (textbookId) => api.post('/rag/index', null, { params: { textbook_id: textbookId } }),
   query: (query) => api.post('/rag/query', { query }),
   getStatus: () => api.get('/rag/status'),
 };
