@@ -17,7 +17,7 @@ async def upload_textbook(
     db: AsyncSession = Depends(get_db)
 ):
     """上传教材文件（仅保存，不解析）"""
-    allowed_formats = [".pdf", ".md", ".txt"]
+    allowed_formats = [".pdf", ".md", ".txt", ".docx"]
     file_ext = "." + file.filename.split(".")[-1].lower()
     if file_ext not in allowed_formats:
         raise HTTPException(status_code=400, detail=f"不支持的文件格式: {file_ext}")
@@ -80,6 +80,8 @@ async def parse_textbook(
             _, chapters = await parser.parse_markdown(file_path, textbook_id)
         elif file_ext == ".txt":
             _, chapters = await parser.parse_text(file_path, textbook_id)
+        elif file_ext == ".docx":
+            _, chapters = await parser.parse_docx(file_path, textbook_id)
         else:
             raise HTTPException(status_code=400, detail="不支持的文件格式")
 

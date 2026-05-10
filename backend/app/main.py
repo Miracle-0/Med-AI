@@ -2,7 +2,7 @@ from typing import List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.routers import textbooks, graph, rag, chat
+from app.routers import textbooks, graph, rag, chat, demo
 from app.database import init_db
 from app.models import Textbook, Chapter, KnowledgeNode, KnowledgeEdge, MergeDecision, Chunk  # noqa: F401
 from app.graph.workflow import workflow_app
@@ -29,6 +29,7 @@ app.include_router(textbooks.router, prefix="/api/textbooks", tags=["教材管�
 app.include_router(graph.router, prefix="/api/graph", tags=["知识图谱"])
 app.include_router(rag.router, prefix="/api/rag", tags=["RAG问答"])
 app.include_router(chat.router, prefix="/api/chat", tags=["对话"])
+app.include_router(demo.router, prefix="/api/demo", tags=["演示数据"])
 
 @app.post("/api/pipeline/run")
 async def run_pipeline(textbook_paths: List[str]):

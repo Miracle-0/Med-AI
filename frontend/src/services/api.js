@@ -11,7 +11,7 @@ export const textbookAPI = {
     formData.append('file', file);
     return api.post('/textbooks/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 600000, // 10 minutes for large files
+      timeout: 600000,
     });
   },
   parse: (id) => api.post(`/textbooks/${id}/parse`, null, { timeout: 300000 }),
@@ -22,7 +22,8 @@ export const textbookAPI = {
 };
 
 export const graphAPI = {
-  extract: (textbookId) => api.post(`/graph/extract/${textbookId}`),
+  extract: (textbookId) => api.post(`/graph/extract/${textbookId}`, null, { timeout: 300000 }),
+  extractProgress: (textbookId) => `/api/graph/extract/${textbookId}/progress`,
   getNodes: (textbookId) => api.get('/graph/nodes', { params: { textbook_id: textbookId } }),
   getEdges: (textbookId) => api.get('/graph/edges', { params: { textbook_id: textbookId } }),
   merge: () => api.post('/graph/merge'),
@@ -40,6 +41,11 @@ export const chatAPI = {
     api.post('/chat/message', { message, session_id: sessionId }),
   getHistory: (sessionId = 'default') =>
     api.get('/chat/history', { params: { session_id: sessionId } }),
+};
+
+export const demoAPI = {
+  load: () => api.post('/demo/load'),
+  clear: () => api.delete('/demo/clear'),
 };
 
 export const pipelineAPI = {

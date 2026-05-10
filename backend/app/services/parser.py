@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 from datetime import datetime, timezone
 import fitz  # PyMuPDF
 from app.models.textbook import Textbook, ParseStatus
@@ -154,6 +154,70 @@ class TextbookParser:
             total_chars=total_chars,
             upload_time=datetime.now(timezone.utc),
             parse_status=ParseStatus.COMPLETED
+        )
+
+        return textbook, chapters
+
+    async def parse_docx(self, file_path: str, textbook_id: str) -> Tuple[Textbook, List[Chapter]]:
+        """解析 DOCX 文件"""
+        from docx import Document
+
+        doc = Document(file_path)
+        filename = os.path.basename(file_path)
+        title = filename.replace(".docx", "")
+
+        chapters: List[Chapter] = []
+        current_chapter: Optional[str] = None
+        chapter_content: List[str] = []
+        chapter_id = 0
+
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if not text:
+                continue
+
+            # 检测标题（Heading 1 或 Heading 2）
+            if para.style.name.startswith("Heading"):
+                if current_chapter and chapter_content:
+                    chapter_id += 1
+                    content = "\n".join(chapter_content)
+                    chapters.append(Chapter(
+                        chapter_id=f"{textbook_id}_ch_{chapter_id:02d}",
+                        textbook_id=textbook_id,
+                        title=current_chapter,
+                        page_start=1, page_end=1,
+                        content=content,
+                        char_count=len(content),
+                    ))
+                current_chapter = text
+                chapter_content = []
+            else:
+                chapter_content.append(text)
+
+        # 最后一章
+        if current_chapter and chapter_content:
+            chapter_id += 1
+            content = "\n".join(chapter_content)
+            chapters.append(Chapter(
+                chapter_id=f"{textbook_id}_ch_{chapter_id:02d}",
+                textbook_id=textbook_id,
+                title=current_chapter,
+                page_start=1, page_end=1,
+                content=content,
+                char_count=len(content),
+            ))
+
+        total_chars = sum(ch.char_count for ch in chapters)
+
+        textbook = Textbook(
+            textbook_id=textbook_id,
+            filename=filename,
+            title=title,
+            format="docx",
+            total_pages=1,
+            total_chars=total_chars,
+            upload_time=datetime.now(timezone.utc),
+            parse_status=ParseStatus.COMPLETED,
         )
 
         return textbook, chapters

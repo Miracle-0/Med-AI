@@ -4,10 +4,12 @@
 
 ## 功能特性
 
-- **教材解析**: 支持 PDF、DOCX 格式的教材内容自动解析
-- **知识图谱**: 自动提取知识点，构建跨学科关联图谱
-- **RAG 问答**: 基于教材内容的智能问答系统
-- **可视化**: ECharts 驱动的交互式知识图谱展示
+- **教材解析**: 支持 PDF、Markdown、TXT 格式的教材内容自动解析
+- **知识图谱**: 自动提取知识点，构建跨学科关联图谱，支持 4 种关系类型
+- **跨教材整合**: 基于 Embedding 相似度检测重复知识点，LLM 自动决策合并/保留/删除
+- **RAG 问答**: 基于教材内容的智能问答系统，附带引用来源和相关度评分
+- **多轮对话**: 支持上下文的连续对话，帮助教师理解和优化整合方案
+- **可视化**: ECharts 驱动的交互式知识图谱展示，支持缩放、拖拽、聚焦
 
 ## 技术栈
 
@@ -16,6 +18,7 @@
 - **LangGraph**: 基于 LangChain 的图执行框架
 - **FAISS**: 向量相似度检索
 - **SQLAlchemy**: 异步数据库 ORM
+- **PyMuPDF**: PDF 解析
 
 ### 前端
 - **React 18**: 用户界面框架
@@ -23,87 +26,56 @@
 - **Ant Design**: UI 组件库
 - **Vite**: 构建工具
 
-## 快速开始
+## Docker 一键部署（推荐）
+
+```bash
+# 1. 配置环境变量
+cp backend/.env.example .env
+# 编辑 .env 文件，填入 API Key
+
+# 2. 启动服务
+docker-compose up -d
+
+# 3. 访问应用
+# 前端: http://localhost:3000
+# API 文档: http://localhost:8000/docs
+```
+
+环境变量说明：
+
+| 变量 | 说明 | 示例 |
+|------|------|------|
+| `OPENAI_API_KEY` | LLM API 密钥 | `sk-xxx` |
+| `OPENAI_BASE_URL` | LLM API 地址 | `https://api.gpugeek.com/v1` |
+| `LLM_MODEL` | LLM 模型 ID | `Vendor2/Claude-4.7-opus` |
+| `EMBEDDING_API_KEY` | Embedding API 密钥 | `ms-xxx` |
+| `EMBEDDING_BASE_URL` | Embedding API 地址 | `https://api-inference.modelscope.cn/v1` |
+| `EMBEDDING_MODEL` | Embedding 模型 ID | `Qwen/Qwen3-Embedding-8B` |
+
+## 本地开发
 
 ### 环境要求
 - Python 3.10+
 - Node.js 18+
-- npm 或 yarn
 
 ### 后端启动
 
 ```bash
-# 进入后端目录
 cd backend
-
-# 创建虚拟环境
 python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-
-# 安装依赖
+source venv/bin/activate
 pip install -r requirements.txt
-
-# 配置环境变量
 cp .env.example .env
-# 编辑 .env 文件，填入你的 OpenAI API Key
-
-# 启动服务
+# 编辑 .env 填入 API Key
 python run.py
 ```
-
-后端服务将在 http://localhost:8000 启动
 
 ### 前端启动
 
 ```bash
-# 进入前端目录
 cd frontend
-
-# 安装依赖
 npm install
-
-# 启动开发服务器
 npm run dev
-```
-
-前端应用将在 http://localhost:3000 启动
-
-## 配置说明
-
-### 环境变量 (.env)
-
-```bash
-# OpenAI API 配置
-OPENAI_API_KEY=your_api_key_here
-OPENAI_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4
-
-# Embedding 模型
-EMBEDDING_MODEL=text-embedding-ada-002
-```
-
-## 项目结构
-
-```
-学科知识整合智能体/
-├── backend/
-│   ├── app/
-│   │   ├── routers/          # API 路由
-│   │   ├── __init__.py
-│   │   ├── main.py          # FastAPI 应用入口
-│   │   └── config.py        # 配置管理
-│   ├── data/
-│   │   └── textbooks/       # 教材存储目录
-│   ├── uploads/             # 上传文件目录
-│   ├── requirements.txt     # Python 依赖
-│   └── run.py              # 启动脚本
-├── frontend/
-│   ├── src/                 # React 源代码
-│   ├── public/              # 静态资源
-│   ├── package.json         # 前端依赖
-│   └── vite.config.js       # Vite 配置
-├── .gitignore
-└── README.md
 ```
 
 ## API 文档
@@ -114,12 +86,50 @@ EMBEDDING_MODEL=text-embedding-ada-002
 
 | 端点 | 方法 | 描述 |
 |------|------|------|
-| `/api/textbooks/upload` | POST | 上传教材 |
-| `/api/textbooks/list` | GET | 获取教材列表 |
-| `/api/graph/build` | POST | 构建知识图谱 |
-| `/api/graph/query` | GET | 查询知识图谱 |
-| `/api/rag/query` | POST | RAG 问答 |
-| `/api/chat/send` | POST | 发送对话消息 |
+| `/api/textbooks/upload` | POST | 上传教材文件 |
+| `/api/textbooks/{id}/parse` | POST | 解析已上传的教材 |
+| `/api/textbooks/` | GET | 获取教材列表 |
+| `/api/graph/extract/{id}` | POST | 提取知识点构建图谱 |
+| `/api/graph/extract/{id}/progress` | GET | SSE 实时获取提取进度 |
+| `/api/graph/nodes` | GET | 获取知识点列表 |
+| `/api/graph/edges` | GET | 获取关系列表 |
+| `/api/graph/merge` | POST | 跨教材知识点整合 |
+| `/api/rag/index` | POST | 构建 RAG 向量索引 |
+| `/api/rag/query` | POST | RAG 智能问答 |
+| `/api/chat/message` | POST | 发送对话消息 |
+| `/api/chat/history` | GET | 获取对话历史 |
+| `/api/demo/load` | POST | 加载演示数据 |
+
+## 项目结构
+
+```
+学科知识整合智能体/
+├── backend/
+│   ├── app/
+│   │   ├── routers/          # API 路由 (textbooks, graph, rag, chat, demo)
+│   │   ├── services/         # 业务逻辑 (parser, extractor, merger, llm, rag)
+│   │   ├── models/           # 数据模型 (textbook, chapter, knowledge, rag)
+│   │   ├── graph/            # LangGraph 状态机 (workflow, nodes, state)
+│   │   ├── utils/            # 工具类 (embedding)
+│   │   ├── main.py           # FastAPI 应用入口
+│   │   ├── config.py         # 配置管理
+│   │   └── database.py       # 数据库初始化
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── src/
+│   │   ├── components/       # React 组件
+│   │   ├── services/         # API 调用层
+│   │   ├── styles/           # 全局样式
+│   │   ├── App.jsx           # 主应用
+│   │   └── main.jsx          # 入口
+│   ├── Dockerfile
+│   └── nginx.conf
+├── docker-compose.yml
+├── docs/                     # 设计文档
+├── report/                   # 整合报告
+└── test_data/                # 测试数据
+```
 
 ## 许可证
 

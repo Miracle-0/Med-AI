@@ -1,36 +1,46 @@
 import json
-from typing import Dict, Any
+import logging
+from typing import Dict, Any, List, Optional
 from openai import AsyncOpenAI
 from app.config import settings
 
-class LLMService:
-    """LLM服务"""
+logger = logging.getLogger(__name__)
 
-    def __init__(self):
+
+class LLMService:
+    """LLM 服务 — 封装 OpenAI 兼容 API 调用"""
+
+    def __init__(self) -> None:
         self.client = AsyncOpenAI(
             api_key=settings.OPENAI_API_KEY,
-            base_url=settings.OPENAI_BASE_URL
+            base_url=settings.OPENAI_BASE_URL,
         )
         self.model = settings.LLM_MODEL
 
-    async def generate(self, prompt: str, system_prompt: str = None) -> str:
-        """生成文本"""
-        messages = []
+    async def generate(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+        """生成文本（单轮）"""
+        messages: List[Dict[str, str]] = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
+        return await self.generate_with_messages(messages)
 
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=0.3,
-            max_tokens=4096
-        )
+    async def generate_with_messages(self, messages: List[Dict[str, str]]) -> str:
+        """生成文本（支持完整消息列表，用于多轮对话）"""
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.3,
+                max_tokens=4096,
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            logger.error(f"LLM 调用失败: {e}")
+            raise
 
-        return response.choices[0].message.content
-
-    async def generate_json(self, prompt: str, system_prompt: str = None) -> Dict[str, Any]:
-        """生成JSON格式响应"""
+    async def generate_json(self, prompt: str, system_prompt: Optional[str] = None) -> Dict[str, Any]:
+        """生成 JSON 格式响应"""
         response = await self.generate(prompt, system_prompt)
         try:
             if "```json" in response:
@@ -42,5 +52,6 @@ class LLMService:
             return json.loads(json_str.strip())
         except json.JSONDecodeError:
             return {"error": "Failed to parse JSON", "raw_response": response}
+
 
 llm_service = LLMService()
