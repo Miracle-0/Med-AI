@@ -11,8 +11,10 @@ export const textbookAPI = {
     formData.append('file', file);
     return api.post('/textbooks/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000, // 10 minutes for large files
     });
   },
+  parse: (id) => api.post(`/textbooks/${id}/parse`, null, { timeout: 300000 }),
   list: () => api.get('/textbooks/'),
   get: (id) => api.get(`/textbooks/${id}`),
   delete: (id) => api.delete(`/textbooks/${id}`),
